@@ -979,7 +979,7 @@ int unit_test_registration_accept_t3550(amf_ue_ngap_id_t ue_id) {
 }
 
 // Send GNB Reset Request
-void send_gnb_reset_req(ngap_reset_type_t reset_type, uint32_t gnb_ue_ngap_id) {
+void send_gnb_reset_req(ngap_reset_type_t reset_type, uint32_t gnb_ue_ngap_id, amf_ue_context_t* amf_ue_context) {
   itti_ngap_gnb_initiated_reset_req_t reset_req_msg = {};
   reset_req_msg.ngap_reset_type = reset_type;
   reset_req_msg.gnb_id = 10;
@@ -989,9 +989,7 @@ void send_gnb_reset_req(ngap_reset_type_t reset_type, uint32_t gnb_ue_ngap_id) {
   reset_req_msg.ue_to_reset_list = reinterpret_cast<ng_sig_conn_id_t*>(calloc(1, sizeof(ng_sig_conn_id_t)));
   reset_req_msg.ue_to_reset_list[0].amf_ue_ngap_id = INVALID_AMF_UE_NGAP_ID;
   reset_req_msg.ue_to_reset_list[0].gnb_ue_ngap_id = gnb_ue_ngap_id;
-
   amf_app_handle_gnb_reset_req(&reset_req_msg, amf_ue_context);
-
   // Free allocated memory
   free(reset_req_msg.ue_to_reset_list);
 }

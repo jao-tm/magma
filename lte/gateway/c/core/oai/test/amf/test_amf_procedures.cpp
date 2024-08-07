@@ -3377,7 +3377,8 @@ TEST_F(AMFAppProcedureTest, GnbInitiatedNGReset) {
   EXPECT_EQ(amf_app_desc_p->amf_ue_contexts.gnb_ue_ngap_id_ue_context_htbl.size(), 2);
 
   // Send GNB reset request for UE-2
-  send_gnb_reset_req(M5G_RESET_PARTIAL, 2);  // Assuming 2 is the gNB UE NGAP ID for UE-2
+  // Assuming amf_app_desc_p is accessible in your test
+  send_gnb_reset_req(M5G_RESET_PARTIAL, 2, &amf_app_desc_p->amf_ue_contexts);  // Assuming 2 is the gNB UE NGAP ID for UE-2
 
   // Verify that only one UE context remains (UE-1)
   EXPECT_EQ(amf_app_desc_p->amf_ue_contexts.gnb_ue_ngap_id_ue_context_htbl.size(), 1);
