@@ -172,5 +172,5 @@ int send_pdu_session_modification_itti();
 int send_pdu_session_modification_deletion_itti();
 
 // Send GNB Reset Request
-void send_gnb_reset_req();
+void send_gnb_reset_req(ngap_reset_type_t reset_type, uint32_t gnb_ue_ngap_id);
 }  // namespace magma5g

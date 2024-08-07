@@ -279,8 +279,8 @@ void send_initial_context_response(amf_app_desc_t* amf_app_desc_p,
 
   apn_config_profile_t& profile = ue_context_p->amf_context.apn_config_profile;
   profile.nb_apns = 1;
-  strncpy(profile.apn_configuration[0].service_selection, "internet", 8);
-  profile.apn_configuration[0].service_selection_length = 8;
+  strncpy(profile.apn_configuration[0].service_selection, "internet", sizeof(profile.apn_configuration[0].service_selection) - 1);
+  profile.apn_configuration[0].service_selection[sizeof(profile.apn_configuration[0].service_selection) - 1] = '\0';
 
   ics_resp.ue_id = ue_id;
 
@@ -979,20 +979,20 @@ int unit_test_registration_accept_t3550(amf_ue_ngap_id_t ue_id) {
 }
 
 // Send GNB Reset Request
-void send_gnb_reset_req() {
+void send_gnb_reset_req(ngap_reset_type_t reset_type, uint32_t gnb_ue_ngap_id) {
   itti_ngap_gnb_initiated_reset_req_t reset_req_msg = {};
-  reset_req_msg.ngap_reset_type = M5G_RESET_ALL;
-  reset_req_msg.gnb_id = 1;
+  reset_req_msg.ngap_reset_type = reset_type;
+  reset_req_msg.gnb_id = 10;
   reset_req_msg.sctp_assoc_id = 1;
   reset_req_msg.sctp_stream_id = 1;
   reset_req_msg.num_ue = 1;
-  reset_req_msg.ue_to_reset_list =
-      reinterpret_cast<ng_sig_conn_id_t*>(calloc(1, sizeof(ng_sig_conn_id_t)));
-  reset_req_msg.ue_to_reset_list[0].amf_ue_ngap_id = 1;
-  reset_req_msg.ue_to_reset_list[0].gnb_ue_ngap_id = 1;
+  reset_req_msg.ue_to_reset_list = reinterpret_cast<ng_sig_conn_id_t*>(calloc(1, sizeof(ng_sig_conn_id_t)));
+  reset_req_msg.ue_to_reset_list[0].amf_ue_ngap_id = INVALID_AMF_UE_NGAP_ID;
+  reset_req_msg.ue_to_reset_list[0].gnb_ue_ngap_id = gnb_ue_ngap_id;
 
-  amf_app_handle_gnb_reset_req(&reset_req_msg);
+  amf_app_handle_gnb_reset_req(&reset_req_msg, amf_ue_context);
 
+  // Free allocated memory
   free(reset_req_msg.ue_to_reset_list);
 }
 }  // namespace magma5g

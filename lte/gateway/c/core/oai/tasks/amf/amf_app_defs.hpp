@@ -84,5 +84,6 @@ void amf_app_handle_gnb_deregister_ind(
     const itti_ngap_gNB_deregistered_ind_t* const gNB_deregistered_ind);
 
 void amf_app_handle_gnb_reset_req(
-    const itti_ngap_gnb_initiated_reset_req_t* const gnb_reset_req);
+    const itti_ngap_gnb_initiated_reset_req_t* const gnb_reset_req,
+    amf_ue_context_t* amf_ue_context);
 }  // namespace magma5g

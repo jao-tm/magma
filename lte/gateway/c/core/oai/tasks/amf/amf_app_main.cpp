@@ -187,7 +187,8 @@ static int handle_message(zloop_t* loop, zsock_t* reader, void* arg) {
 
     case NGAP_GNB_INITIATED_RESET_REQ: {
       amf_app_handle_gnb_reset_req(
-          &NGAP_GNB_INITIATED_RESET_REQ(received_message_p));
+          &NGAP_GNB_INITIATED_RESET_REQ(received_message_p),
+          &amf_app_desc_p->amf_ue_contexts);
       is_task_state_same = true;
     } break;
 
