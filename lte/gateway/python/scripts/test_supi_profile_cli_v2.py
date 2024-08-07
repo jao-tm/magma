@@ -12,15 +12,52 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+from EC import ECDH_SECP256R1, X25519
+import sys
+sys.path.append('/home/vagrant/magma')
+
+#from lte.protos.subscriberdb import SuciProfileDB
 
 import argparse
 from typing import NamedTuple
-from EC import ECDH_SECP256R1, X25519
 
-from lte.protos.subscriberdb import SuciProfile
-from lte.protos.subscriberdb import SuciProfileDBStub
-from magma.common.rpc_utils import grpc_wrapper
-from orc8r.protos.common_pb2 import Void
+class SuciProfile(NamedTuple):
+    class ECIESProtectionScheme:
+        ProfileA = 0
+        ProfileB = 1
+
+    home_net_public_key_id: int
+    protection_scheme: ECIESProtectionScheme
+    home_net_public_key: bytes
+    home_net_private_key: bytes
+
+class Void:
+    pass
+
+
+
+# Define SuciProfileList message
+class SuciProfileList(NamedTuple):
+    suci_profiles: list
+
+# Define SuciProfileDB service
+class SuciProfileDB:
+    def __init__(self):
+        self.suci_profiles = []
+
+    def AddSuciProfile(self, request):
+        self.suci_profiles.append(request)
+
+    def DeleteSuciProfile(self, request):
+        for profile in self.suci_profiles:
+            if profile.home_net_public_key_id == request.home_net_public_key_id:
+                self.suci_profiles.remove(profile)
+                break
+
+    def ListSuciProfile(self, request):
+        return SuciProfileList(suci_profiles=self.suci_profiles)
+
+
 
 
 class home_network_key_pair(NamedTuple):
@@ -93,8 +130,7 @@ def print_suciprofile(obj: SuciProfile):
     print("#######")
 
 
-@grpc_wrapper
-def add_suciprofile(client, args):
+def add_suciprofile(client, args, db_stub):
     """
     add_suciprofile
     """
@@ -128,12 +164,11 @@ def add_suciprofile(client, args):
         home_net_public_key=bytes(hnp_gen.get_home_network_public_key()),
         home_net_private_key=bytes(hnp_gen.get_home_network_private_key()),
     )
-    client.AddSuciProfile(request)
+    db_stub.AddSuciProfile(request)
     print("Added the record")
     print_suciprofile(request)
 
 
-@grpc_wrapper
 def delete_suciprofile(client, args):
     """
     delete_suciprofile
@@ -146,7 +181,6 @@ def delete_suciprofile(client, args):
     print("Deleted the record with home_net_public_key_id:", args.home_net_public_key_id)
 
 
-@grpc_wrapper
 def list_suciprofile(client, args):
     """
     list_suciprofile
@@ -174,10 +208,12 @@ def main():
     subparser.add_argument(
         "--home_net_public_key_id", help="home_network_public_key_id"
         "  e.g: --home_net_public_key_id 0..255",
+        required=True  # Ensure this argument is required
     )
     subparser.add_argument(
         "--protection_scheme", help="ECIESProtectionScheme"
         "  e.g: --protection_scheme 0 or 1",
+        required=True  # Ensure this argument is required
     )
 
     subparser.set_defaults(func=add_suciprofile)
@@ -187,6 +223,7 @@ def main():
     subparser.add_argument(
         "--home_net_public_key_id", help="home_network_public_key_id"
         "  e.g: --home_net_public_key_id 0..255",
+        required=True  # Ensure this argument is required
     )
     subparser.set_defaults(func=delete_suciprofile)
 
@@ -201,7 +238,8 @@ def main():
         exit(1)
 
     # Execute the subcommand function
-    args.func(args, SuciProfileDBStub, 'subscriberdb')
+    args.func(args, SuciProfileDB(), 'subscriberdb')  # Pass an instance of SuciProfileDB
+
 
 
 if __name__ == "__main__":
