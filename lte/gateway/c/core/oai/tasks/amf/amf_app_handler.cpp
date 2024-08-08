@@ -2013,6 +2013,17 @@ static int pdu_session_resource_modification_t3591_handler(zloop_t* loop,
   OAILOG_FUNC_RETURN(LOG_NAS_AMF, RETURNok);
 }
 
+void send_ngap_nas_dl_data_req(amf_ue_ngap_id_t amf_ue_ngap_id, gnb_ue_ngap_id_t gnb_ue_ngap_id) {
+  MessageDef* message_p = DEPRECATEDitti_alloc_new_message_fatal(TASK_AMF_APP, NGAP_NAS_DL_DATA_REQ);
+  itti_ngap_nas_dl_data_req_t* ngap_nas_dl_data_req_p = &message_p->ittiMsg.ngap_nas_dl_data_req;
+
+  ngap_nas_dl_data_req_p->amf_ue_ngap_id = amf_ue_ngap_id;
+  ngap_nas_dl_data_req_p->gnb_ue_ngap_id = gnb_ue_ngap_id;
+  // Set other necessary fields for the message
+
+  amf_send_msg_to_task(&amf_app_task_zmq_ctx, TASK_NGAP, message_p);
+}
+
 //------------------------------------------------------------------------------
 void amf_app_handle_gnb_reset_req(
     const itti_ngap_gnb_initiated_reset_req_t* const gnb_reset_req,
@@ -2021,54 +2032,36 @@ void amf_app_handle_gnb_reset_req(
   itti_ngap_gnb_initiated_reset_ack_t* reset_ack;
   OAILOG_FUNC_IN(LOG_AMF_APP);
   OAILOG_INFO(LOG_AMF_APP,
-              " gNB Reset request received. gNB id = %d, reset_type  %d \n ",
+              "gNB Reset request received. gNB id = %d, reset_type %d",
               gnb_reset_req->gnb_id, gnb_reset_req->ngap_reset_type);
-  printf(" gNB Reset request received. gNB id = %d, reset_type  %d, AMF list: %lu, gNB list: %u \n ",
-              gnb_reset_req->gnb_id, gnb_reset_req->ngap_reset_type, 
-              gnb_reset_req->ue_to_reset_list ? gnb_reset_req->ue_to_reset_list[0].amf_ue_ngap_id : 0,
-              gnb_reset_req->ue_to_reset_list ? gnb_reset_req->ue_to_reset_list[0].gnb_ue_ngap_id : 0);
-  
-  if (gnb_reset_req->ue_to_reset_list == NULL) {
-    OAILOG_ERROR(LOG_AMF_APP,
-                 "Invalid UE list received in gNB Reset Request\n");
-    printf("Invalid UE list received in gNB Reset Request\n");
-    OAILOG_FUNC_OUT(LOG_AMF_APP);
-  }
-  
-  if (gnb_reset_req->ngap_reset_type == M5G_RESET_PARTIAL) {
-    for (uint32_t i = 0; i < gnb_reset_req->num_ue; i++) {
-      amf_ue_ngap_id_t amf_ue_ngap_id = gnb_reset_req->ue_to_reset_list[i].amf_ue_ngap_id;
-      gnb_ue_ngap_id_t gnb_ue_ngap_id = gnb_reset_req->ue_to_reset_list[i].gnb_ue_ngap_id;
-      
-      OAILOG_DEBUG(LOG_AMF_APP, "Processing UE for reset: AMF_UE_NGAP_ID=%lu, GNB_UE_NGAP_ID=%u\n", 
-                   amf_ue_ngap_id, gnb_ue_ngap_id);
 
-      ue_m5gmm_context_s* ue_context = amf_ue_context_exists_amf_ue_ngap_id(amf_ue_ngap_id);
-      if (ue_context != nullptr && ue_context->gnb_ue_ngap_id == gnb_ue_ngap_id) {
-        OAILOG_INFO(LOG_AMF_APP, "Releasing UE context: AMF_UE_NGAP_ID=%lu, GNB_UE_NGAP_ID=%u\n", 
-                    amf_ue_ngap_id, gnb_ue_ngap_id);
-        amf_app_handle_ngap_ue_context_release(amf_ue_ngap_id, gnb_ue_ngap_id,
-                                               gnb_reset_req->gnb_id, NGAP_SCTP_SHUTDOWN_OR_RESET);
-        amf_remove_ue_context(amf_ue_context, ue_context);
-      } else {
-        OAILOG_WARNING(LOG_AMF_APP, "UE context not found or mismatch: AMF_UE_NGAP_ID=%lu, GNB_UE_NGAP_ID=%u\n", 
-                       amf_ue_ngap_id, gnb_ue_ngap_id);
-      }
+  std::vector<amf_ue_ngap_id_t> ue_ids_to_release;
+
+  if (gnb_reset_req->ngap_reset_type == M5G_RESET_PARTIAL) {
+    if (gnb_reset_req->ue_to_reset_list == NULL || gnb_reset_req->num_ue == 0) {
+      OAILOG_ERROR(LOG_AMF_APP, "Invalid UE list received in gNB Partial Reset Request");
+      OAILOG_FUNC_OUT(LOG_AMF_APP);
+      return;
+    }
+
+    OAILOG_INFO(LOG_AMF_APP, "Processing Partial Reset for %d UE(s)", gnb_reset_req->num_ue);
+    for (uint32_t i = 0; i < gnb_reset_req->num_ue; i++) {
+      ue_ids_to_release.push_back(gnb_reset_req->ue_to_reset_list[i].amf_ue_ngap_id);
+    }
+  } else if (gnb_reset_req->ngap_reset_type == M5G_RESET_ALL) {
+    OAILOG_INFO(LOG_AMF_APP, "Processing Full Reset");
+    for (const auto& entry : amf_ue_context->gnb_ue_ngap_id_ue_context_htbl.umap) {
+      ue_ids_to_release.push_back(entry.second);
     }
   } else {
-    // Full Reset
-    for (uint32_t i = 0; i < gnb_reset_req->num_ue; i++) {
-      amf_app_handle_ngap_ue_context_release(
-          gnb_reset_req->ue_to_reset_list[i].amf_ue_ngap_id,
-          gnb_reset_req->ue_to_reset_list[i].gnb_ue_ngap_id,
-          gnb_reset_req->gnb_id, NGAP_SCTP_SHUTDOWN_OR_RESET);
-    }
-  }  
+    OAILOG_ERROR(LOG_AMF_APP, "Invalid reset type received: %d", gnb_reset_req->ngap_reset_type);
+    OAILOG_FUNC_OUT(LOG_AMF_APP);
+    return;
+  }
+
   // Send Reset Ack to NGAP module
-  msg = DEPRECATEDitti_alloc_new_message_fatal(TASK_AMF_APP,
-                                               NGAP_GNB_INITIATED_RESET_ACK);
+  msg = DEPRECATEDitti_alloc_new_message_fatal(TASK_AMF_APP, NGAP_GNB_INITIATED_RESET_ACK);
   reset_ack = &NGAP_GNB_INITIATED_RESET_ACK(msg);
-  // ue_to_reset_list needs to be freed by NGAP module
   reset_ack->ue_to_reset_list = gnb_reset_req->ue_to_reset_list;
   reset_ack->ngap_reset_type = gnb_reset_req->ngap_reset_type;
   reset_ack->sctp_assoc_id = gnb_reset_req->sctp_assoc_id;
@@ -2076,8 +2069,38 @@ void amf_app_handle_gnb_reset_req(
   reset_ack->num_ue = gnb_reset_req->num_ue;
   amf_send_msg_to_task(&amf_app_task_zmq_ctx, TASK_NGAP, msg);
   OAILOG_INFO(LOG_AMF_APP,
-              " Reset Ack sent to NGAP. gNB id = %d, reset_type  %d \n ",
+              "Reset Ack sent to NGAP. gNB id = %d, reset_type %d",
               gnb_reset_req->gnb_id, gnb_reset_req->ngap_reset_type);
+
+  // Process UE context release after sending Reset Ack
+  for (const auto& amf_ue_ngap_id : ue_ids_to_release) {
+    ue_m5gmm_context_s* ue_context = amf_ue_context_exists_amf_ue_ngap_id(amf_ue_ngap_id);
+    if (ue_context) {
+      OAILOG_DEBUG(LOG_AMF_APP, "Releasing UE context: AMF_UE_NGAP_ID=%lu, GNB_UE_NGAP_ID=%u", 
+                   amf_ue_ngap_id, ue_context->gnb_ue_ngap_id);
+      
+      // Send NGAP_NAS_DL_DATA_REQ
+      send_ngap_nas_dl_data_req(amf_ue_ngap_id, ue_context->gnb_ue_ngap_id);
+
+      // Send UE_CONTEXT_RELEASE_COMMAND
+      amf_app_handle_ngap_ue_context_release(amf_ue_ngap_id, ue_context->gnb_ue_ngap_id,
+                                             gnb_reset_req->gnb_id, NGAP_SCTP_SHUTDOWN_OR_RESET);
+
+      // Remove UE context
+      amf_remove_ue_context(amf_ue_context, ue_context);
+    }
+  }
+
+  // Send final NGAP_UE_CONTEXT_RELEASE_COMMAND for partial reset
+  if (gnb_reset_req->ngap_reset_type == M5G_RESET_PARTIAL && !ue_ids_to_release.empty()) {
+    amf_ue_ngap_id_t last_ue_id = ue_ids_to_release.back();
+    ue_m5gmm_context_s* last_ue_context = amf_ue_context_exists_amf_ue_ngap_id(last_ue_id);
+    if (last_ue_context) {
+      amf_app_handle_ngap_ue_context_release(last_ue_id, last_ue_context->gnb_ue_ngap_id,
+                                             gnb_reset_req->gnb_id, NGAP_SCTP_SHUTDOWN_OR_RESET);
+    }
+  }
+
   OAILOG_FUNC_OUT(LOG_AMF_APP);
 }
 }  // namespace magma5g

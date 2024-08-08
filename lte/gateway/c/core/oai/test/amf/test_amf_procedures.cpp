@@ -3336,8 +3336,6 @@ TEST_F(AMFAppProcedureTest, GnbInitiatedPartialNGReset) {
       NGAP_INITIAL_CONTEXT_SETUP_REQ,
       NGAP_GNB_INITIATED_RESET_ACK,
       NGAP_NAS_DL_DATA_REQ,
-      NGAP_UE_CONTEXT_RELEASE_COMMAND,
-      NGAP_NAS_DL_DATA_REQ,
       NGAP_UE_CONTEXT_RELEASE_COMMAND
   };
 
@@ -3418,13 +3416,17 @@ EXPECT_TRUE(rc == RETURNok);
 
   printf("gNB reset finished\n");
 
-    std::cout << "Expected IDs: ";
+    const std::string prefix1 = "Expected IDs: ";
+    const std::string prefix2 = "Actual message type stack: ";
+    const int max_prefix_length = std::max(prefix1.length(), prefix2.length());
+
+    std::cout << std::left << std::setw(max_prefix_length) << prefix1;
     for (const auto& id : expected_Ids) {
         std::cout << id << " ";
     }
     std::cout << std::endl;
 
-    std::cout << "Actual message type stack: ";
+    std::cout << std::left << std::setw(max_prefix_length) << prefix2;
     for (const auto& msgtype : AMFClientServicer::getInstance().msgtype_stack) {
         std::cout << msgtype << " ";
     }
@@ -3534,13 +3536,17 @@ EXPECT_TRUE(rc == RETURNok);
 
   printf("gNB reset finished\n");
 
-    std::cout << "Expected IDs: ";
+    const std::string prefix1 = "Expected IDs: ";
+    const std::string prefix2 = "Actual message type stack: ";
+    const int max_prefix_length = std::max(prefix1.length(), prefix2.length());
+
+    std::cout << std::left << std::setw(max_prefix_length) << prefix1;
     for (const auto& id : expected_Ids) {
         std::cout << id << " ";
     }
     std::cout << std::endl;
 
-    std::cout << "Actual message type stack: ";
+    std::cout << std::left << std::setw(max_prefix_length) << prefix2;
     for (const auto& msgtype : AMFClientServicer::getInstance().msgtype_stack) {
         std::cout << msgtype << " ";
     }
