@@ -2027,6 +2027,7 @@ void amf_app_handle_gnb_reset_req(
               gnb_reset_req->gnb_id, gnb_reset_req->ngap_reset_type, 
               gnb_reset_req->ue_to_reset_list ? gnb_reset_req->ue_to_reset_list[0].amf_ue_ngap_id : 0,
               gnb_reset_req->ue_to_reset_list ? gnb_reset_req->ue_to_reset_list[0].gnb_ue_ngap_id : 0);
+  
   if (gnb_reset_req->ue_to_reset_list == NULL) {
     OAILOG_ERROR(LOG_AMF_APP,
                  "Invalid UE list received in gNB Reset Request\n");
@@ -2039,13 +2040,23 @@ void amf_app_handle_gnb_reset_req(
       amf_ue_ngap_id_t amf_ue_ngap_id = gnb_reset_req->ue_to_reset_list[i].amf_ue_ngap_id;
       gnb_ue_ngap_id_t gnb_ue_ngap_id = gnb_reset_req->ue_to_reset_list[i].gnb_ue_ngap_id;
       
-      magma5g::ue_m5gmm_context_s* ue_context = amf_ue_context_exists_gnb_ue_ngap_id(amf_ue_context, gnb_ue_ngap_id);
-      if (ue_context != nullptr) {
+      OAILOG_DEBUG(LOG_AMF_APP, "Processing UE for reset: AMF_UE_NGAP_ID=%lu, GNB_UE_NGAP_ID=%u\n", 
+                   amf_ue_ngap_id, gnb_ue_ngap_id);
+
+      ue_m5gmm_context_s* ue_context = amf_ue_context_exists_amf_ue_ngap_id(amf_ue_ngap_id);
+      if (ue_context != nullptr && ue_context->gnb_ue_ngap_id == gnb_ue_ngap_id) {
+        OAILOG_INFO(LOG_AMF_APP, "Releasing UE context: AMF_UE_NGAP_ID=%lu, GNB_UE_NGAP_ID=%u\n", 
+                    amf_ue_ngap_id, gnb_ue_ngap_id);
         amf_app_handle_ngap_ue_context_release(amf_ue_ngap_id, gnb_ue_ngap_id,
                                                gnb_reset_req->gnb_id, NGAP_SCTP_SHUTDOWN_OR_RESET);
+        amf_remove_ue_context(amf_ue_context, ue_context);
+      } else {
+        OAILOG_WARNING(LOG_AMF_APP, "UE context not found or mismatch: AMF_UE_NGAP_ID=%lu, GNB_UE_NGAP_ID=%u\n", 
+                       amf_ue_ngap_id, gnb_ue_ngap_id);
       }
     }
   } else {
+    // Full Reset
     for (uint32_t i = 0; i < gnb_reset_req->num_ue; i++) {
       amf_app_handle_ngap_ue_context_release(
           gnb_reset_req->ue_to_reset_list[i].amf_ue_ngap_id,

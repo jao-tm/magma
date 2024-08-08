@@ -101,6 +101,13 @@ class AMFAppProcedureTest : public ::testing::Test {
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x2e,
       0x08, 0x80, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
+// const uint8_t initial_ue_message_hexbuf[76] = {
+//     0x00, 0x0f, 0x40, 0x46, 0x00, 0x00, 0x04, 0x00, 0x55, 0x00, 0x05, 0xc0, 0x01, 0x01, 0x51, 0x89,
+//     0x00, 0x26, 0x00, 0x1a, 0x19, 0x7e, 0x00, 0x41, 0x71, 0x00, 0x0d, 0x01, 0x99, 0xf9, 0x07, 0xf0,
+//     0xff, 0x00, 0x00, 0x00, 0x00, 0x60, 0x48, 0x01, 0x2e, 0x04, 0xf0, 0x70, 0xf0, 0x70, 0x00, 0x79,
+//     0x00, 0x13, 0x50, 0x99, 0xf9, 0x07, 0x00, 0x01, 0x9c, 0x06, 0xe0, 0x99, 0xf9, 0x07, 0x00, 0x92,
+//     0x87, 0xe9, 0x28, 0x01, 0x3c, 0x00, 0x5a, 0x40, 0x01, 0x40};
+
   const uint8_t initial_ue_plmn_mismatch_message_hexbuf[23] = {
       0x7e, 0x00, 0x41, 0x79, 0x00, 0x0d, 0x01, 0x00, 0x91, 0x10, 0xf0, 0xff,
       0x00, 0x00, 0x79, 0x56, 0x54, 0x66, 0xf4, 0x2e, 0x02, 0xf0, 0xf0};
@@ -3314,7 +3321,7 @@ TEST_F(AMFAppProcedureTest, TestPDUSessionResourceModifyDeletion) {
   send_ue_context_release_complete_message(amf_app_desc_p, 1, 1, ue_id);
 }
 
-TEST_F(AMFAppProcedureTest, GnbInitiatedNGReset) {
+TEST_F(AMFAppProcedureTest, GnbInitiatedPartialNGReset) {
   int rc = RETURNerror;
   amf_ue_ngap_id_t ue_id_1 = 0;
   amf_ue_ngap_id_t ue_id_2 = 0;
@@ -3339,9 +3346,11 @@ TEST_F(AMFAppProcedureTest, GnbInitiatedNGReset) {
                                            initial_ue_message_hexbuf,
                                            sizeof(initial_ue_message_hexbuf));
   EXPECT_TRUE(get_ue_id_from_imsi(amf_app_desc_p, imsi64_1, &ue_id_1));
+  std::cout << "UE-1 IMSI: " << imsi << ", UE ID: " << ue_id_1 << std::endl;
 
   // Complete registration process for UE-1
   rc = send_proc_authentication_info_answer(imsi, ue_id_1, true);
+  std::cout << "UE-1 Authentication result: " << (rc == RETURNok ? "Success" : "Failure") << std::endl;
   EXPECT_TRUE(rc == RETURNok);
   rc = send_uplink_nas_message_ue_auth_response(amf_app_desc_p, ue_id_1, plmn, ue_auth_response_hexbuf, sizeof(ue_auth_response_hexbuf));
   EXPECT_TRUE(rc == RETURNok);
@@ -3354,19 +3363,29 @@ TEST_F(AMFAppProcedureTest, GnbInitiatedNGReset) {
   EXPECT_TRUE(rc == RETURNok);
   send_initial_context_response(amf_app_desc_p, ue_id_1);
 
-  /* UE-2-Registration */
-  imsi64_t imsi64_2 = send_initial_ue_message_no_tmsi(amf_app_desc_p, 36, 1, 2, 0, plmn, initial_ue_message_hexbuf, sizeof(initial_ue_message_hexbuf));
-  EXPECT_TRUE(get_ue_id_from_imsi(amf_app_desc_p, imsi64_2, &ue_id_2));
+/* UE-2-Registration */
+// Modify the IMSI for UE-2 to ensure it's different from UE-1
+  const uint8_t initial_ue_message_hexbuf_2[29] = {
+      0x7e, 0x00, 0x41, 0x79, 0x00, 0x0d, 0x01, 0x22, 0x62, 0x54,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x2e, //0x02 for IMSI 222456000000002
+      0x08, 0x80, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+std::string imsi_2 = "222456000000002";
+imsi64_t imsi64_2 = std::stoull(imsi_2);
 
-  // Complete registration process for UE-2
-  std::string imsi_temp = "222456000000002";
-  rc = send_proc_authentication_info_answer(imsi_temp, ue_id_2, true);
-  EXPECT_TRUE(rc == RETURNok);
+// Use the correct IMSI for UE-2 in the initial message
+imsi64_2 = send_initial_ue_message_no_tmsi(amf_app_desc_p, 36, 1, 2, 0, plmn, initial_ue_message_hexbuf_2, sizeof(initial_ue_message_hexbuf_2));
+EXPECT_TRUE(get_ue_id_from_imsi(amf_app_desc_p, imsi64_2, &ue_id_2));
+std::cout << "UE-2 IMSI: " << imsi64_2 << ", UE ID: " << ue_id_2 << std::endl;
+
+// Complete registration process for UE-2
+rc = send_proc_authentication_info_answer(imsi_2, ue_id_2, true);
+std::cout << "UE-2 Authentication result: " << (rc == RETURNok ? "Success" : "Failure") << std::endl;
+EXPECT_TRUE(rc == RETURNok);
   rc = send_uplink_nas_message_ue_auth_response(amf_app_desc_p, ue_id_2, plmn, ue_auth_response_hexbuf, sizeof(ue_auth_response_hexbuf));
   EXPECT_TRUE(rc == RETURNok);
   rc = send_uplink_nas_message_ue_smc_response(amf_app_desc_p, ue_id_2, plmn, ue_smc_response_hexbuf, sizeof(ue_smc_response_hexbuf));
   EXPECT_TRUE(rc == RETURNok);
-  s6a_update_location_ans_t ula_ans1 = util_amf_send_s6a_ula(imsi_temp);
+  s6a_update_location_ans_t ula_ans1 = util_amf_send_s6a_ula(imsi_2);
   rc = amf_handle_s6a_update_location_ans(&ula_ans1);
   EXPECT_TRUE(rc == RETURNok);
   rc = send_uplink_nas_registration_complete(amf_app_desc_p, ue_id_2, plmn, ue_registration_complete_hexbuf, sizeof(ue_registration_complete_hexbuf));
@@ -3376,9 +3395,19 @@ TEST_F(AMFAppProcedureTest, GnbInitiatedNGReset) {
   // Verify that two UE contexts exist
   EXPECT_EQ(amf_app_desc_p->amf_ue_contexts.gnb_ue_ngap_id_ue_context_htbl.size(), 2);
 
+  // Log initial state
+  OAILOG_DEBUG(LOG_AMF_APP, "Initial UE contexts: UE_1=%p, UE_2=%p\n", 
+               amf_ue_context_exists_amf_ue_ngap_id(ue_id_1),
+               amf_ue_context_exists_amf_ue_ngap_id(ue_id_2));
+
   // Send GNB reset request for UE-2
   // Assuming amf_app_desc_p is accessible in your test
-  send_gnb_reset_req(M5G_RESET_PARTIAL, 2, &amf_app_desc_p->amf_ue_contexts);  // Assuming 2 is the gNB UE NGAP ID for UE-2
+  send_gnb_reset_req(M5G_RESET_PARTIAL, ue_id_2, &amf_app_desc_p->amf_ue_contexts);
+
+    // Log state after reset
+  OAILOG_DEBUG(LOG_AMF_APP, "After reset UE contexts: UE_1=%p, UE_2=%p\n", 
+               amf_ue_context_exists_amf_ue_ngap_id(ue_id_1),
+               amf_ue_context_exists_amf_ue_ngap_id(ue_id_2));
 
   // Verify that only one UE context remains (UE-1)
   EXPECT_EQ(amf_app_desc_p->amf_ue_contexts.gnb_ue_ngap_id_ue_context_htbl.size(), 1);
@@ -3389,12 +3418,135 @@ TEST_F(AMFAppProcedureTest, GnbInitiatedNGReset) {
 
   printf("gNB reset finished\n");
 
+    std::cout << "Expected IDs: ";
+    for (const auto& id : expected_Ids) {
+        std::cout << id << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "Actual message type stack: ";
+    for (const auto& msgtype : AMFClientServicer::getInstance().msgtype_stack) {
+        std::cout << msgtype << " ";
+    }
+    std::cout << std::endl;
+
   /* UE-1-Deregistration */
   rc = send_uplink_nas_ue_deregistration_request(amf_app_desc_p, ue_id_1, plmn, ue_initiated_dereg_hexbuf, sizeof(ue_initiated_dereg_hexbuf));
   EXPECT_TRUE(rc == RETURNok);
   send_ue_context_release_complete_message(amf_app_desc_p, 1, 1, ue_id_1);
 
   // Verify message sequence
+  EXPECT_TRUE(expected_Ids == AMFClientServicer::getInstance().msgtype_stack);
+}
+
+TEST_F(AMFAppProcedureTest, GnbInitiatedFullNGReset) {
+  int rc = RETURNerror;
+  amf_ue_ngap_id_t ue_id_1 = 0;
+  amf_ue_ngap_id_t ue_id_2 = 0;
+  std::vector<MessagesIds> expected_Ids{
+      AMF_APP_NGAP_AMF_UE_ID_NOTIFICATION,
+      NGAP_NAS_DL_DATA_REQ,
+      NGAP_NAS_DL_DATA_REQ,
+      NGAP_INITIAL_CONTEXT_SETUP_REQ,
+      AMF_APP_NGAP_AMF_UE_ID_NOTIFICATION,
+      NGAP_NAS_DL_DATA_REQ,
+      NGAP_NAS_DL_DATA_REQ,
+      NGAP_INITIAL_CONTEXT_SETUP_REQ,
+      NGAP_GNB_INITIATED_RESET_ACK,
+      NGAP_NAS_DL_DATA_REQ,
+      NGAP_UE_CONTEXT_RELEASE_COMMAND,
+      NGAP_NAS_DL_DATA_REQ,
+      NGAP_UE_CONTEXT_RELEASE_COMMAND
+  };
+
+  /* UE-1-Registration */
+  imsi64_t imsi64_1 = send_initial_ue_message_no_tmsi(amf_app_desc_p, 36, 1, 1, 0, plmn,
+                                           initial_ue_message_hexbuf,
+                                           sizeof(initial_ue_message_hexbuf));
+  EXPECT_TRUE(get_ue_id_from_imsi(amf_app_desc_p, imsi64_1, &ue_id_1));
+  std::cout << "UE-1 IMSI: " << imsi << ", UE ID: " << ue_id_1 << std::endl;
+
+  // Complete registration process for UE-1
+  rc = send_proc_authentication_info_answer(imsi, ue_id_1, true);
+  std::cout << "UE-1 Authentication result: " << (rc == RETURNok ? "Success" : "Failure") << std::endl;
+  EXPECT_TRUE(rc == RETURNok);
+  rc = send_uplink_nas_message_ue_auth_response(amf_app_desc_p, ue_id_1, plmn, ue_auth_response_hexbuf, sizeof(ue_auth_response_hexbuf));
+  EXPECT_TRUE(rc == RETURNok);
+  rc = send_uplink_nas_message_ue_smc_response(amf_app_desc_p, ue_id_1, plmn, ue_smc_response_hexbuf, sizeof(ue_smc_response_hexbuf));
+  EXPECT_TRUE(rc == RETURNok);
+  s6a_update_location_ans_t ula_ans = util_amf_send_s6a_ula(imsi);
+  rc = amf_handle_s6a_update_location_ans(&ula_ans);
+  EXPECT_TRUE(rc == RETURNok);
+  rc = send_uplink_nas_registration_complete(amf_app_desc_p, ue_id_1, plmn, ue_registration_complete_hexbuf, sizeof(ue_registration_complete_hexbuf));
+  EXPECT_TRUE(rc == RETURNok);
+  send_initial_context_response(amf_app_desc_p, ue_id_1);
+
+/* UE-2-Registration */
+// Modify the IMSI for UE-2 to ensure it's different from UE-1
+  const uint8_t initial_ue_message_hexbuf_2[29] = {
+      0x7e, 0x00, 0x41, 0x79, 0x00, 0x0d, 0x01, 0x22, 0x62, 0x54,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x2e, //0x02 for IMSI 222456000000002
+      0x08, 0x80, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+std::string imsi_2 = "222456000000002";
+imsi64_t imsi64_2 = std::stoull(imsi_2);
+
+// Use the correct IMSI for UE-2 in the initial message
+imsi64_2 = send_initial_ue_message_no_tmsi(amf_app_desc_p, 36, 1, 2, 0, plmn, initial_ue_message_hexbuf_2, sizeof(initial_ue_message_hexbuf_2));
+EXPECT_TRUE(get_ue_id_from_imsi(amf_app_desc_p, imsi64_2, &ue_id_2));
+std::cout << "UE-2 IMSI: " << imsi64_2 << ", UE ID: " << ue_id_2 << std::endl;
+
+// Complete registration process for UE-2
+rc = send_proc_authentication_info_answer(imsi_2, ue_id_2, true);
+std::cout << "UE-2 Authentication result: " << (rc == RETURNok ? "Success" : "Failure") << std::endl;
+EXPECT_TRUE(rc == RETURNok);
+  rc = send_uplink_nas_message_ue_auth_response(amf_app_desc_p, ue_id_2, plmn, ue_auth_response_hexbuf, sizeof(ue_auth_response_hexbuf));
+  EXPECT_TRUE(rc == RETURNok);
+  rc = send_uplink_nas_message_ue_smc_response(amf_app_desc_p, ue_id_2, plmn, ue_smc_response_hexbuf, sizeof(ue_smc_response_hexbuf));
+  EXPECT_TRUE(rc == RETURNok);
+  s6a_update_location_ans_t ula_ans1 = util_amf_send_s6a_ula(imsi_2);
+  rc = amf_handle_s6a_update_location_ans(&ula_ans1);
+  EXPECT_TRUE(rc == RETURNok);
+  rc = send_uplink_nas_registration_complete(amf_app_desc_p, ue_id_2, plmn, ue_registration_complete_hexbuf, sizeof(ue_registration_complete_hexbuf));
+  EXPECT_TRUE(rc == RETURNok);
+  send_initial_context_response(amf_app_desc_p, ue_id_2);
+
+  // Verify that two UE contexts exist
+  EXPECT_EQ(amf_app_desc_p->amf_ue_contexts.gnb_ue_ngap_id_ue_context_htbl.size(), 2);
+
+  // Log initial state
+  OAILOG_DEBUG(LOG_AMF_APP, "Initial UE contexts: UE_1=%p, UE_2=%p\n", 
+               amf_ue_context_exists_amf_ue_ngap_id(ue_id_1),
+               amf_ue_context_exists_amf_ue_ngap_id(ue_id_2));
+
+  // Send GNB reset request for UE-2
+  // Assuming amf_app_desc_p is accessible in your test
+  send_gnb_reset_req(M5G_RESET_ALL, 0, &amf_app_desc_p->amf_ue_contexts);
+
+    // Log state after reset
+  OAILOG_DEBUG(LOG_AMF_APP, "After reset UE contexts: UE_1=%p, UE_2=%p\n", 
+               amf_ue_context_exists_amf_ue_ngap_id(ue_id_1),
+               amf_ue_context_exists_amf_ue_ngap_id(ue_id_2));
+
+  // Verify that both are removed
+  EXPECT_EQ(amf_app_desc_p->amf_ue_contexts.gnb_ue_ngap_id_ue_context_htbl.size(), 0);
+  EXPECT_EQ(amf_ue_context_exists_amf_ue_ngap_id(ue_id_1), nullptr);
+  EXPECT_EQ(amf_ue_context_exists_amf_ue_ngap_id(ue_id_2), nullptr);
+
+  printf("gNB reset finished\n");
+
+    std::cout << "Expected IDs: ";
+    for (const auto& id : expected_Ids) {
+        std::cout << id << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "Actual message type stack: ";
+    for (const auto& msgtype : AMFClientServicer::getInstance().msgtype_stack) {
+        std::cout << msgtype << " ";
+    }
+    std::cout << std::endl;
+
+   // Verify message sequence
   EXPECT_TRUE(expected_Ids == AMFClientServicer::getInstance().msgtype_stack);
 }
 

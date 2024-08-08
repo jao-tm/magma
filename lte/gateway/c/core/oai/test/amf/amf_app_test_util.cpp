@@ -979,18 +979,34 @@ int unit_test_registration_accept_t3550(amf_ue_ngap_id_t ue_id) {
 }
 
 // Send GNB Reset Request
-void send_gnb_reset_req(ngap_reset_type_t reset_type, uint32_t gnb_ue_ngap_id, amf_ue_context_t* amf_ue_context) {
+void send_gnb_reset_req(ngap_reset_type_t reset_type, amf_ue_ngap_id_t ue_id, amf_ue_context_t* amf_ue_context) {
   itti_ngap_gnb_initiated_reset_req_t reset_req_msg = {};
   reset_req_msg.ngap_reset_type = reset_type;
   reset_req_msg.gnb_id = 10;
   reset_req_msg.sctp_assoc_id = 1;
   reset_req_msg.sctp_stream_id = 1;
-  reset_req_msg.num_ue = 1;
-  reset_req_msg.ue_to_reset_list = reinterpret_cast<ng_sig_conn_id_t*>(calloc(1, sizeof(ng_sig_conn_id_t)));
-  reset_req_msg.ue_to_reset_list[0].amf_ue_ngap_id = INVALID_AMF_UE_NGAP_ID;
-  reset_req_msg.ue_to_reset_list[0].gnb_ue_ngap_id = gnb_ue_ngap_id;
+
+  if (reset_type == M5G_RESET_PARTIAL) {
+    reset_req_msg.num_ue = 1;
+    reset_req_msg.ue_to_reset_list = reinterpret_cast<ng_sig_conn_id_t*>(calloc(1, sizeof(ng_sig_conn_id_t)));
+    reset_req_msg.ue_to_reset_list[0].amf_ue_ngap_id = ue_id;
+    
+    ue_m5gmm_context_s* ue_context = amf_ue_context_exists_amf_ue_ngap_id(ue_id);
+    if (ue_context) {
+      reset_req_msg.ue_to_reset_list[0].gnb_ue_ngap_id = ue_context->gnb_ue_ngap_id;
+    } else {
+      OAILOG_WARNING(LOG_AMF_APP, "UE context not found for AMF_UE_NGAP_ID=%lu\n", ue_id);
+      reset_req_msg.ue_to_reset_list[0].gnb_ue_ngap_id = INVALID_GNB_UE_NGAP_ID;
+    }
+  } else if (reset_type == M5G_RESET_ALL) {
+    reset_req_msg.num_ue = 0;
+    reset_req_msg.ue_to_reset_list = nullptr;
+  }
+
   amf_app_handle_gnb_reset_req(&reset_req_msg, amf_ue_context);
-  // Free allocated memory
-  free(reset_req_msg.ue_to_reset_list);
+
+  if (reset_req_msg.ue_to_reset_list) {
+    free(reset_req_msg.ue_to_reset_list);
+  }
 }
 }  // namespace magma5g

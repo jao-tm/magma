@@ -754,6 +754,7 @@ status_code_e amf_nas_proc_authentication_info_answer(
   IMSI_STRING_TO_IMSI64((char*)aia->imsi, &imsi64);
 
   OAILOG_DEBUG(LOG_AMF_APP, "Handling imsi " IMSI_64_FMT "\n", imsi64);
+  printf("Handling imsi " IMSI_64_FMT "\n", imsi64);
 
   ue_5gmm_context_p = lookup_ue_ctxt_by_imsi(imsi64);
 
