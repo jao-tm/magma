@@ -185,12 +185,36 @@ static int handle_message(zloop_t* loop, zsock_t* reader, void* arg) {
           &received_message_p->ittiMsg.ngap_gNB_deregistered_ind);
       break;
 
+    // case NGAP_GNB_INITIATED_RESET_REQ: {
+    //   amf_app_handle_gnb_reset_req(
+    //       &NGAP_GNB_INITIATED_RESET_REQ(received_message_p),
+    //       &amf_app_desc_p->amf_ue_contexts);
+    //   is_task_state_same = true;
+    // } break;
+
     case NGAP_GNB_INITIATED_RESET_REQ: {
-      amf_app_handle_gnb_reset_req(
-          &NGAP_GNB_INITIATED_RESET_REQ(received_message_p),
-          &amf_app_desc_p->amf_ue_contexts);
-      is_task_state_same = true;
-    } break;
+      OAILOG_INFO(LOG_AMF_APP, "Received NGAP_GNB_INITIATED_RESET_REQ:");
+      const itti_ngap_gnb_initiated_reset_req_t* reset_req = 
+          &NGAP_GNB_INITIATED_RESET_REQ(received_message_p);
+      
+      OAILOG_INFO(LOG_AMF_APP, "  gNB ID: %d", reset_req->gnb_id);
+      OAILOG_INFO(LOG_AMF_APP, "  Reset Type: %d", reset_req->ngap_reset_type);
+      OAILOG_INFO(LOG_AMF_APP, "  Number of UEs: %d", reset_req->num_ue);
+      OAILOG_INFO(LOG_AMF_APP, "  UE List Pointer: %p", (void*)reset_req->ue_to_reset_list);
+      
+      if (reset_req->num_ue > 0 && reset_req->ue_to_reset_list != NULL) {
+        for (uint32_t i = 0; i < reset_req->num_ue; i++) {
+          OAILOG_INFO(LOG_AMF_APP, "    UE %d: AMF_UE_NGAP_ID=%lu, GNB_UE_NGAP_ID=%u",
+                      i, reset_req->ue_to_reset_list[i].amf_ue_ngap_id,
+                      reset_req->ue_to_reset_list[i].gnb_ue_ngap_id);
+        }
+      } else {
+        OAILOG_WARNING(LOG_AMF_APP, "  Empty or NULL UE list in reset request");
+      }
+      
+      amf_app_handle_gnb_reset_req(reset_req, &amf_app_desc_p->amf_ue_contexts);
+      break;
+    }
 
     /* Handle Terminate message */
     case TERMINATE_MESSAGE:

@@ -1043,4 +1043,6 @@ bool get_amf_ue_id_from_imsi(amf_ue_context_t* amf_ue_context_p,
                              imsi64_t imsi64, amf_ue_ngap_id_t* ue_id);
 
 void nas_amf_procedure_gc(amf_context_t* amf_ctx);
+
+amf_ue_ngap_id_t amf_ue_id_from_gnb_ue_id(gnb_ue_ngap_id_t gnb_ue_ngap_id, amf_ue_context_t* amf_ue_context);
 }  // namespace magma5g
