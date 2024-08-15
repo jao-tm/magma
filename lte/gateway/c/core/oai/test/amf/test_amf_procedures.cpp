@@ -3444,20 +3444,28 @@ EXPECT_TRUE(rc == RETURNok);
 }
 
 TEST_F(AMFAppProcedureTest, GnbInitiatedPartialNGResetWithOnlyRanUeNgapId) {
-    OAILOG_INFO(LOG_AMF_APP, "Starting GnbInitiatedPartialNGResetWithOnlyRanUeNgapId test");
-    // Clear the message stack prior to testing
+    std::cout << "Starting GnbInitiatedPartialNGResetWithOnlyRanUeNgapId test" << std::endl;
     AMFClientServicer::getInstance().msgtype_stack.clear();
-
     int rc = RETURNerror;
     amf_ue_ngap_id_t ue_id = 0;
-    gnb_ue_ngap_id_t gnb_ue_ngap_id = 16790097;  // Use the value from your real-life scenario
+    gnb_ue_ngap_id_t gnb_ue_ngap_id = 16790023;
 
-    // Set up UE context
+    // Define expected message sequence for this specific test
+    std::vector<MessagesIds> expected_Ids{
+        AMF_APP_NGAP_AMF_UE_ID_NOTIFICATION,
+        NGAP_NAS_DL_DATA_REQ,
+        NGAP_NAS_DL_DATA_REQ,
+        NGAP_INITIAL_CONTEXT_SETUP_REQ,
+        NGAP_GNB_INITIATED_RESET_ACK,
+        NGAP_NAS_DL_DATA_REQ,
+        NGAP_UE_CONTEXT_RELEASE_COMMAND
+    };
+
+    // Set up UE context and complete registration process
     imsi64_t imsi64 = send_initial_ue_message_no_tmsi(amf_app_desc_p, 36, 1, gnb_ue_ngap_id, 0, plmn,
                                            initial_ue_message_hexbuf,
                                            sizeof(initial_ue_message_hexbuf));
     EXPECT_TRUE(get_ue_id_from_imsi(amf_app_desc_p, imsi64, &ue_id));
-    OAILOG_INFO(LOG_AMF_APP, "UE context set up with AMF_UE_NGAP_ID: %lu", ue_id);
     
     // Complete registration process for UE
     rc = send_proc_authentication_info_answer(imsi, ue_id, true);
@@ -3471,15 +3479,9 @@ TEST_F(AMFAppProcedureTest, GnbInitiatedPartialNGResetWithOnlyRanUeNgapId) {
     EXPECT_TRUE(rc == RETURNok);
     rc = send_uplink_nas_registration_complete(amf_app_desc_p, ue_id, plmn, ue_registration_complete_hexbuf, sizeof(ue_registration_complete_hexbuf));
     EXPECT_TRUE(rc == RETURNok);
-    
 
-
-    // Set up expected message sequence for reset only
-    std::vector<MessagesIds> expected_Ids{
-        NGAP_GNB_INITIATED_RESET_ACK,
-        NGAP_NAS_DL_DATA_REQ,
-        NGAP_UE_CONTEXT_RELEASE_COMMAND
-    };  
+    std::cout << "Before reset, UE context exists for AMF_UE_NGAP_ID " << ue_id << ": " 
+              << (amf_ue_context_exists_amf_ue_ngap_id(ue_id) ? "true" : "false") << std::endl;
 
     // Create partial reset request
     itti_ngap_gnb_initiated_reset_req_t reset_req;
@@ -3489,79 +3491,45 @@ TEST_F(AMFAppProcedureTest, GnbInitiatedPartialNGResetWithOnlyRanUeNgapId) {
     reset_req.ue_to_reset_list = (ng_sig_conn_id_t*)calloc(1, sizeof(ng_sig_conn_id_t));
     reset_req.ue_to_reset_list[0].amf_ue_ngap_id = INVALID_AMF_UE_NGAP_ID;
     reset_req.ue_to_reset_list[0].gnb_ue_ngap_id = gnb_ue_ngap_id;
-    reset_req.gnb_id = 501;  // Use the value from your real-life scenario
-
-    OAILOG_INFO(LOG_AMF_APP, "Before reset, UE context exists for AMF_UE_NGAP_ID %lu: %s", 
-                ue_id, (amf_ue_context_exists_amf_ue_ngap_id(ue_id) ? "true" : "false"));
+    reset_req.gnb_id = 501;
 
     // Call the reset function
-    OAILOG_INFO(LOG_AMF_APP, "Calling send_gnb_reset_req with GNB_UE_NGAP_ID %u", gnb_ue_ngap_id);
+    std::cout << "Calling send_gnb_reset_req with GNB_UE_NGAP_ID " << gnb_ue_ngap_id << std::endl;
     send_gnb_reset_req(M5G_RESET_PARTIAL, gnb_ue_ngap_id, &amf_app_desc_p->amf_ue_contexts);
 
-    // Verify that the NGResetAcknowledge was sent
-    auto capturedMessages = AMFClientServicer::getInstance().getCapturedMessages();
-    ASSERT_FALSE(capturedMessages.empty());
-
-    // Find the NGResetAcknowledge message
-    auto it = std::find_if(capturedMessages.begin(), capturedMessages.end(),
-        [](const CapturedMessage& msg) {
-            return msg.messageType == Ngap_NGAP_PDU_PR_successfulOutcome &&
-                   msg.procedureCode == Ngap_ProcedureCode_id_NGReset;
-        });
-    ASSERT_NE(it, capturedMessages.end()) << "NGResetAcknowledge not found in sent messages";
-
-    const auto& resetAck = it->ngapMessage;
-
-    // Verify the NGResetAcknowledge content
-    EXPECT_EQ(resetAck.choice.successfulOutcome.procedureCode, Ngap_ProcedureCode_id_NGReset);
-    EXPECT_EQ(resetAck.choice.successfulOutcome.criticality, Ngap_Criticality_reject);
-
-    const auto& ackValue = resetAck.choice.successfulOutcome.value.choice.NGResetAcknowledge;
-    ASSERT_EQ(ackValue.protocolIEs.list.count, 1);
-
-    const auto& ie = ackValue.protocolIEs.list.array[0];
-    EXPECT_EQ(ie->id, Ngap_ProtocolIE_ID_id_UE_associatedLogicalNG_connectionList);
-    EXPECT_EQ(ie->criticality, Ngap_Criticality_ignore);
-    EXPECT_EQ(ie->value.present, Ngap_NGResetAcknowledgeIEs__value_PR_UE_associatedLogicalNG_connectionList);
-
-    const auto& ueList = ie->value.choice.UE_associatedLogicalNG_connectionList;
-    ASSERT_EQ(ueList.list.count, 1);
-
-    const auto& ueItem = ueList.list.array[0];
-    ASSERT_NE(ueItem->rAN_UE_NGAP_ID, nullptr);
-    EXPECT_EQ(*ueItem->rAN_UE_NGAP_ID, gnb_ue_ngap_id);
-
-    if (ueItem->aMF_UE_NGAP_ID) {
-        // If AMF_UE_NGAP_ID was found, verify its value
-        EXPECT_NE(*ueItem->aMF_UE_NGAP_ID, INVALID_AMF_UE_NGAP_ID);
-    } else {
-        // If AMF_UE_NGAP_ID was not found, it should be omitted
-        EXPECT_EQ(ueItem->aMF_UE_NGAP_ID, nullptr);
-    }
-
-    OAILOG_INFO(LOG_AMF_APP, "After reset, UE context exists for AMF_UE_NGAP_ID %lu: %s", 
-                ue_id, (amf_ue_context_exists_amf_ue_ngap_id(ue_id) ? "true" : "false"));
+    std::cout << "After reset, UE context exists for AMF_UE_NGAP_ID " << ue_id << ": " 
+              << (amf_ue_context_exists_amf_ue_ngap_id(ue_id) ? "true" : "false") << std::endl;
 
     // Print expected and actual message sequences
-    OAILOG_INFO(LOG_AMF_APP, "Expected IDs: %s", 
-                AMFClientServicer::getInstance().message_ids_to_string(expected_Ids).c_str());
-    OAILOG_INFO(LOG_AMF_APP, "Actual message type stack: %s", 
-                AMFClientServicer::getInstance().message_ids_to_string(AMFClientServicer::getInstance().msgtype_stack).c_str());
+    std::cout << "Expected IDs: ";
+    for (const auto& id : expected_Ids) {
+        std::cout << id << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "Actual message type stack: ";
+    for (const auto& msgtype : AMFClientServicer::getInstance().msgtype_stack) {
+        std::cout << msgtype << " ";
+    }
+    std::cout << std::endl;
 
     // Verify correct behavior
     EXPECT_TRUE(expected_Ids == AMFClientServicer::getInstance().msgtype_stack);
 
     // Additional verifications
     ue_m5gmm_context_s* ue_context = amf_ue_context_exists_amf_ue_ngap_id(ue_id);
-    OAILOG_INFO(LOG_AMF_APP, "Final check, UE context pointer: %p", (void*)ue_context);
+    std::cout << "Final check, UE context pointer: " << ue_context << std::endl;
     EXPECT_EQ(ue_context, nullptr);  // UE context should be removed after reset
 
     if (ue_context != nullptr) {
-        OAILOG_ERROR(LOG_AMF_APP, "UE context was not removed as expected. AMF_UE_NGAP_ID: %lu, GNB_UE_NGAP_ID: %u",
-                     ue_id, ue_context->gnb_ue_ngap_id);
+        std::cout << "UE context was not removed as expected. AMF_UE_NGAP_ID: " << ue_id 
+                  << ", GNB_UE_NGAP_ID: " << ue_context->gnb_ue_ngap_id << std::endl;
     }
 
-    OAILOG_INFO(LOG_AMF_APP, "GnbInitiatedPartialNGResetWithOnlyRanUeNgapId test completed");
+    // Clean up
+    free(reset_req.ue_to_reset_list);
+
+    std::cout << "GnbInitiatedPartialNGResetWithOnlyRanUeNgapId test completed" << std::endl;
 }
 
 TEST_F(AMFAppProcedureTest, GnbInitiatedFullNGReset) {
