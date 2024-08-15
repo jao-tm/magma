@@ -981,7 +981,7 @@ int unit_test_registration_accept_t3550(amf_ue_ngap_id_t ue_id) {
 // Send GNB Reset Request
 void send_gnb_reset_req(ngap_reset_type_t reset_type, amf_ue_ngap_id_t ue_id, amf_ue_context_t* amf_ue_context) {
   OAILOG_FUNC_IN(LOG_AMF_APP);
-  OAILOG_INFO(LOG_AMF_APP, "Sending gNB Reset Request. Reset type: %s, UE ID: " AMF_UE_NGAP_ID_FMT,
+  OAILOG_INFO(LOG_AMF_APP, "Sending gNB Reset Request. Reset type: %s, UE ID: %lu",
               reset_type == M5G_RESET_PARTIAL ? "Partial" : "Full", ue_id);
 
   itti_ngap_gnb_initiated_reset_req_t reset_req_msg = {};
@@ -998,21 +998,24 @@ void send_gnb_reset_req(ngap_reset_type_t reset_type, amf_ue_ngap_id_t ue_id, am
       OAILOG_FUNC_OUT(LOG_AMF_APP);
       return;
     }
-    reset_req_msg.ue_to_reset_list[0].amf_ue_ngap_id = INVALID_AMF_UE_NGAP_ID;
-    reset_req_msg.ue_to_reset_list[0].gnb_ue_ngap_id = ue_id;
+    reset_req_msg.ue_to_reset_list[0].amf_ue_ngap_id = ue_id;
     
-    OAILOG_DEBUG(LOG_AMF_APP, "Partial Reset: AMF_UE_NGAP_ID set to INVALID, GNB_UE_NGAP_ID set to " AMF_UE_NGAP_ID_FMT, ue_id);
+    ue_m5gmm_context_s* ue_context = amf_ue_context_exists_amf_ue_ngap_id(ue_id);
+    if (ue_context) {
+      reset_req_msg.ue_to_reset_list[0].gnb_ue_ngap_id = ue_context->gnb_ue_ngap_id;
+    } else {
+      OAILOG_WARNING(LOG_AMF_APP, "UE context not found for AMF_UE_NGAP_ID=%lu", ue_id);
+      reset_req_msg.ue_to_reset_list[0].gnb_ue_ngap_id = INVALID_GNB_UE_NGAP_ID;
+    }
   } else if (reset_type == M5G_RESET_ALL) {
     reset_req_msg.num_ue = 0;
     reset_req_msg.ue_to_reset_list = nullptr;
-    OAILOG_DEBUG(LOG_AMF_APP, "Full Reset: No specific UE IDs set");
   } else {
     OAILOG_ERROR(LOG_AMF_APP, "Invalid reset type: %d", reset_type);
     OAILOG_FUNC_OUT(LOG_AMF_APP);
     return;
   }
 
-  OAILOG_DEBUG(LOG_AMF_APP, "Calling amf_app_handle_gnb_reset_req");
   amf_app_handle_gnb_reset_req(&reset_req_msg, amf_ue_context);
 
   if (reset_req_msg.ue_to_reset_list) {

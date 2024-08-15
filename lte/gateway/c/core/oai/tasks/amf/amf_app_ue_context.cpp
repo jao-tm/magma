@@ -975,36 +975,4 @@ bool get_amf_ue_id_from_imsi(amf_ue_context_t* amf_ue_context_p,
   OAILOG_FUNC_RETURN(LOG_AMF_APP, true);
 }
 
-/* Used for partial NG Reset */
-amf_ue_ngap_id_t amf_ue_id_from_gnb_ue_id(gnb_ue_ngap_id_t gnb_ue_ngap_id, amf_ue_context_t* amf_ue_context) {
-    amf_ue_ngap_id_t amf_ue_ngap_id = INVALID_AMF_UE_NGAP_ID;
-    ue_m5gmm_context_s* ue_context_p = nullptr;
-    gnb_ngap_id_key_t gnb_ngap_id_key = INVALID_GNB_UE_NGAP_ID_KEY;
-    
-    if (amf_ue_context == nullptr) {
-        OAILOG_ERROR(LOG_AMF_APP, "AMF UE context is NULL");
-        return INVALID_AMF_UE_NGAP_ID;
-    }
-
-    // We need the gNB ID to create the key. Since we don't have it in this function,
-    // we'll need to iterate through all possible gNB IDs.
-    // This is not efficient and should be optimized if possible.
-    for (uint32_t gnb_id = 0; gnb_id < 4096; gnb_id++) {
-        AMF_APP_GNB_NGAP_ID_KEY(gnb_ngap_id_key, gnb_id, gnb_ue_ngap_id);
-        ue_context_p = amf_ue_context_exists_gnb_ue_ngap_id(amf_ue_context, gnb_ngap_id_key);
-        
-        if (ue_context_p != nullptr) {
-            amf_ue_ngap_id = ue_context_p->amf_ue_ngap_id;
-            OAILOG_INFO(LOG_AMF_APP, "Found AMF UE NGAP ID: " AMF_UE_NGAP_ID_FMT " for GNB UE NGAP ID: " GNB_UE_NGAP_ID_FMT, amf_ue_ngap_id, gnb_ue_ngap_id);
-            break;
-        }
-    }
-
-    if (amf_ue_ngap_id == INVALID_AMF_UE_NGAP_ID) {
-        OAILOG_WARNING(LOG_AMF_APP, "No AMF UE NGAP ID found for GNB UE NGAP ID: " GNB_UE_NGAP_ID_FMT, gnb_ue_ngap_id);
-    }
-
-    return amf_ue_ngap_id;
-}
-
 }  // namespace magma5g
