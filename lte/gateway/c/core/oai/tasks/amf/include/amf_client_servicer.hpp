@@ -126,6 +126,12 @@ class AMFClientServicer : public AMFClientServicerBase {
                                      MessageDef* message_p) override {
     OAILOG_DEBUG(LOG_AMF_APP, " Mock is Enabled \n");
     msgtype_stack.push_back(ITTI_MSG_ID(message_p));
+
+    // Print NGAP_GNB_INITIATED_RESET_ACK message contents
+    if (ITTI_MSG_ID(message_p) == NGAP_GNB_INITIATED_RESET_ACK) {
+      print_ngap_reset_ack_message(message_p);
+    }
+
     itti_free_msg_content(message_p);
     free(message_p);
     return RETURNok;
@@ -211,6 +217,23 @@ class AMFClientServicer : public AMFClientServicerBase {
 #endif /* MME_UNIT_TEST */
 
  private:
+  void print_ngap_reset_ack_message(MessageDef* message_p) {
+    auto* reset_ack = &message_p->ittiMsg.ngap_gnb_initiated_reset_ack;
+    std::cout << "NGResetAcknowledge message contents:" << std::endl;
+    std::cout << "  SCTP Association ID: " << reset_ack->sctp_assoc_id << std::endl;
+    std::cout << "  SCTP Stream ID: " << reset_ack->sctp_stream_id << std::endl;
+    std::cout << "  NGAP Reset Type: " << reset_ack->ngap_reset_type << std::endl;
+    std::cout << "  Number of UEs: " << reset_ack->num_ue << std::endl;
+    
+    if (reset_ack->num_ue > 0 && reset_ack->ue_to_reset_list != nullptr) {
+      std::cout << "  UE List:" << std::endl;
+      for (uint32_t i = 0; i < reset_ack->num_ue; i++) {
+        std::cout << "    UE " << i + 1 << ":" << std::endl;
+        std::cout << "      AMF_UE_NGAP_ID: " << reset_ack->ue_to_reset_list[i].amf_ue_ngap_id << std::endl;
+        std::cout << "      GNB_UE_NGAP_ID: " << reset_ack->ue_to_reset_list[i].gnb_ue_ngap_id << std::endl;
+      }
+    }
+  }
   AMFClientServicer(){};
 };
 

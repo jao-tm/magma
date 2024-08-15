@@ -2307,10 +2307,12 @@ status_code_e ngap_amf_handle_gnb_reset(ngap_state_t* state,
       OAILOG_FUNC_RETURN(LOG_NGAP, RETURNerror);
   }
 
-  msg = DEPRECATEDitti_alloc_new_message_fatal(TASK_NGAP,
-                                               NGAP_GNB_INITIATED_RESET_REQ);
-  reset_req = &NGAP_GNB_INITIATED_RESET_REQ(msg);
+  OAILOG_INFO(LOG_NGAP, "Parsed NGReset message:");
+  OAILOG_INFO(LOG_NGAP, "  Reset Type: %s", 
+              (ngap_reset_type == M5G_RESET_ALL) ? "nG_Interface (Full)" : "partOfNG_Interface (Partial)");
 
+  msg = DEPRECATEDitti_alloc_new_message_fatal(TASK_NGAP, NGAP_GNB_INITIATED_RESET_REQ);
+  reset_req = &NGAP_GNB_INITIATED_RESET_REQ(msg);
   reset_req->ngap_reset_type = ngap_reset_type;
   reset_req->gnb_id = gnb_association->gnb_id;
   reset_req->sctp_assoc_id = assoc_id;
@@ -2337,9 +2339,60 @@ status_code_e ngap_amf_handle_gnb_reset(ngap_state_t* state,
           NULL);
 
       break;
+    case M5G_RESET_PARTIAL:
+      increment_counter("ngap_reset_from_gnb", 1, 1, "type", "M5G_RESET_PARTIAL");
+      Ngap_UE_associatedLogicalNG_connectionList_t* ue_list =
+          &resetType->choice.partOfNG_Interface;
+      reset_req->num_ue = ue_list->list.count;
+      reset_req->ue_to_reset_list =
+          calloc(reset_req->num_ue, sizeof(*(reset_req->ue_to_reset_list)));
+      if (reset_req->ue_to_reset_list == NULL) {
+        OAILOG_ERROR(LOG_NGAP, "ue_to_reset_list allocation failed\n");
+        return RETURNerror;
+      }
+      for (int i = 0; i < reset_req->num_ue; i++) {
+        Ngap_UE_associatedLogicalNG_connectionItem_t* item = 
+            (Ngap_UE_associatedLogicalNG_connectionItem_t*)ue_list->list.array[i];
+        if (item->rAN_UE_NGAP_ID) {
+          reset_req->ue_to_reset_list[i].gnb_ue_ngap_id = *item->rAN_UE_NGAP_ID;
+          if (item->aMF_UE_NGAP_ID) {
+            uint64_t amf_ue_ngap_id_value = 0;
+            memcpy(&amf_ue_ngap_id_value, item->aMF_UE_NGAP_ID->buf, item->aMF_UE_NGAP_ID->size);
+            reset_req->ue_to_reset_list[i].amf_ue_ngap_id = amf_ue_ngap_id_value;
+          } else {
+            reset_req->ue_to_reset_list[i].amf_ue_ngap_id = INVALID_AMF_UE_NGAP_ID;
+          }
+          OAILOG_INFO(LOG_NGAP, "    UE %d: rAN-UE-NGAP-ID: %u, AMF-UE-NGAP-ID: %lu", 
+                      i, reset_req->ue_to_reset_list[i].gnb_ue_ngap_id,
+                      reset_req->ue_to_reset_list[i].amf_ue_ngap_id);
+        }
+      }
+      break;
+    default:
+      OAILOG_ERROR(LOG_NGAP, "Invalid reset type: %d\n", ngap_reset_type);
+      return RETURNerror;
+  }
+
+  // Log the content of the reset request before sending to AMF
+  OAILOG_INFO(LOG_NGAP, "Sending reset request to AMF:");
+  OAILOG_INFO(LOG_NGAP, "  gNB ID: %u", reset_req->gnb_id);
+  OAILOG_INFO(LOG_NGAP, "  Reset Type: %d", reset_req->ngap_reset_type);
+  OAILOG_INFO(LOG_NGAP, "  Number of UEs: %d", reset_req->num_ue);
+  for (uint32_t i = 0; i < reset_req->num_ue; i++) {
+    OAILOG_INFO(LOG_NGAP, "    UE %d: GNB_UE_NGAP_ID = %u, AMF_UE_NGAP_ID = %lu",
+                i, reset_req->ue_to_reset_list[i].gnb_ue_ngap_id,
+                reset_req->ue_to_reset_list[i].amf_ue_ngap_id);
   }
   msg->ittiMsgHeader.imsi = imsi64;
   rc = ngap_send_msg_to_task(&ngap_task_zmq_ctx, TASK_AMF_APP, msg);
+
+    // Verify step 4: Check if the message was sent successfully
+  if (rc == RETURNok) {
+    OAILOG_INFO(LOG_NGAP, "Reset request successfully sent to AMF");
+  } else {
+    OAILOG_ERROR(LOG_NGAP, "Failed to send reset request to AMF");
+  }
+
   OAILOG_FUNC_RETURN(LOG_NGAP, rc);
 }
 
@@ -2362,6 +2415,54 @@ status_code_e ngap_handle_gnb_initiated_reset_ack(
   pdu.choice.successfulOutcome.value.present =
       Ngap_SuccessfulOutcome__value_PR_NGResetAcknowledge;
   out = &pdu.choice.successfulOutcome.value.choice.NGResetAcknowledge;
+
+  // Add UE-associatedLogicalNG-connectionList IE if there are UEs to reset
+  if (gnb_reset_ack_p->num_ue > 0) {
+    ie = (Ngap_NGResetAcknowledgeIEs_t*)calloc(1, sizeof(Ngap_NGResetAcknowledgeIEs_t));
+    if (ie == NULL) {
+      OAILOG_ERROR(LOG_NGAP, "Failed to allocate memory for NGResetAcknowledgeIEs\n");
+      OAILOG_FUNC_RETURN(LOG_NGAP, RETURNerror);
+    }
+
+    ie->id = Ngap_ProtocolIE_ID_id_UE_associatedLogicalNG_connectionList;
+    ie->criticality = Ngap_Criticality_ignore;
+    ie->value.present = Ngap_NGResetAcknowledgeIEs__value_PR_UE_associatedLogicalNG_connectionList;
+
+    for (int i = 0; i < gnb_reset_ack_p->num_ue; i++) {
+      Ngap_UE_associatedLogicalNG_connectionItem_t* item =
+          (Ngap_UE_associatedLogicalNG_connectionItem_t*)calloc(1, sizeof(Ngap_UE_associatedLogicalNG_connectionItem_t));
+      if (item == NULL) {
+        OAILOG_ERROR(LOG_NGAP, "Failed to allocate memory for UE_associatedLogicalNG_connectionItem\n");
+        // Clean up
+        ASN_STRUCT_FREE(asn_DEF_Ngap_NGResetAcknowledge, out);
+        OAILOG_FUNC_RETURN(LOG_NGAP, RETURNerror);
+      }
+
+      // Always include RAN-UE-NGAP-ID
+      item->rAN_UE_NGAP_ID = calloc(1, sizeof(Ngap_RAN_UE_NGAP_ID_t));
+      if (item->rAN_UE_NGAP_ID == NULL) {
+        OAILOG_ERROR(LOG_NGAP, "Failed to allocate memory for RAN_UE_NGAP_ID\n");
+        ASN_STRUCT_FREE(asn_DEF_Ngap_NGResetAcknowledge, out);
+        OAILOG_FUNC_RETURN(LOG_NGAP, RETURNerror);
+      }
+      *item->rAN_UE_NGAP_ID = gnb_reset_ack_p->ue_to_reset_list[i].gnb_ue_ngap_id;
+
+      // Include AMF-UE-NGAP-ID only if it's valid
+      if (gnb_reset_ack_p->ue_to_reset_list[i].amf_ue_ngap_id != INVALID_AMF_UE_NGAP_ID) {
+        item->aMF_UE_NGAP_ID = calloc(1, sizeof(Ngap_AMF_UE_NGAP_ID_t));
+        if (item->aMF_UE_NGAP_ID == NULL) {
+          OAILOG_ERROR(LOG_NGAP, "Failed to allocate memory for AMF_UE_NGAP_ID\n");
+          ASN_STRUCT_FREE(asn_DEF_Ngap_NGResetAcknowledge, out);
+          OAILOG_FUNC_RETURN(LOG_NGAP, RETURNerror);
+        }
+        asn_uint642INTEGER(item->aMF_UE_NGAP_ID, gnb_reset_ack_p->ue_to_reset_list[i].amf_ue_ngap_id);
+      }
+
+      ASN_SEQUENCE_ADD(&ie->value.choice.UE_associatedLogicalNG_connectionList.list, item);
+    }
+
+    ASN_SEQUENCE_ADD(&out->protocolIEs.list, ie);
+  }
 
   if (ngap_amf_encode_pdu(&pdu, &buffer, &length) < 0) {
     OAILOG_ERROR(LOG_NGAP, "Failed to NG NGReset command \n");
