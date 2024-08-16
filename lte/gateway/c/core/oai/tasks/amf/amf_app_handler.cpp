@@ -2087,10 +2087,20 @@ void amf_app_handle_gnb_reset_req(
   reset_ack->sctp_assoc_id = gnb_reset_req->sctp_assoc_id;
   reset_ack->sctp_stream_id = gnb_reset_req->sctp_stream_id;
   reset_ack->num_ue = gnb_reset_req->num_ue;
+  
+  // Log the Reset Ack contents
+  OAILOG_DEBUG(LOG_AMF_APP, "Reset Ack Contents:\n");
+  OAILOG_DEBUG(LOG_AMF_APP, "  NGAP Reset Type: %d\n", reset_ack->ngap_reset_type);
+  OAILOG_DEBUG(LOG_AMF_APP, "  Number of UEs: %u\n", reset_ack->num_ue);
+  for (uint32_t i = 0; i < reset_ack->num_ue; ++i) {
+    OAILOG_DEBUG(LOG_AMF_APP, "  UE %u:\n", i);
+    OAILOG_DEBUG(LOG_AMF_APP, "    AMF UE NGAP ID: " AMF_UE_NGAP_ID_FMT "\n", 
+                 reset_ack->ue_to_reset_list[i].amf_ue_ngap_id);
+    OAILOG_DEBUG(LOG_AMF_APP, "    GNB UE NGAP ID: " GNB_UE_NGAP_ID_FMT "\n", 
+                 reset_ack->ue_to_reset_list[i].gnb_ue_ngap_id);
+  }
+
   amf_send_msg_to_task(&amf_app_task_zmq_ctx, TASK_NGAP, msg);
-  OAILOG_INFO(LOG_AMF_APP,
-              "Reset Ack sent to NGAP. gNB id = %d, reset_type %d",
-              gnb_reset_req->gnb_id, gnb_reset_req->ngap_reset_type);
 
   // Process UE context release
   for (const auto& amf_ue_ngap_id : ue_ids_to_release) {
