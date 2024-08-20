@@ -1382,8 +1382,8 @@ static void amf_app_handle_ngap_ue_context_release(
 }
 
 void amf_app_handle_ngap_ue_context_release_req(
-    const itti_ngap_ue_context_release_req_t* const ngap_ue_context_release_req) {
- 
+    const itti_ngap_ue_context_release_req_t* const
+        ngap_ue_context_release_req) {
   amf_app_handle_ngap_ue_context_release(
       ngap_ue_context_release_req->amf_ue_ngap_id,
       ngap_ue_context_release_req->gnb_ue_ngap_id,
@@ -2047,7 +2047,6 @@ void amf_app_handle_gnb_reset_req(
   reset_ack->sctp_assoc_id = gnb_reset_req->sctp_assoc_id;
   reset_ack->sctp_stream_id = gnb_reset_req->sctp_stream_id;
   reset_ack->num_ue = gnb_reset_req->num_ue;
-  reset_ack->ue_to_reset_list = gnb_reset_req->ue_to_reset_list;
 
   amf_send_msg_to_task(&amf_app_task_zmq_ctx, TASK_NGAP, msg);
 
